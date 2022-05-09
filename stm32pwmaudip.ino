@@ -124,6 +124,7 @@ struct soft_i2s_t{
   uint32_t dout_bits[64];
   uint16_t buf[128];
   uint8_t buf_len;
+  uint8_t buf_i;
   uint8_t req = 0;
 } i2s;
 // #define COMMS_MOSI PB15 //DOUT - bsr.15.31
@@ -134,7 +135,7 @@ void i2s_bits_irq(){
   auto r = dma_get_irq_cause(i2s.dma, i2s.dma_ch) == DMA_TRANSFER_COMPLETE ? 1 : 0;
   auto rr = 16*r;
   auto ws = (0x10000000>>rr) | 0x80000000;
-  auto s = i2s.buf[r];
+  auto s = i2s.buf[i2s.buf_i];
   i2s.dout_bits[0+rr] = (( s & (0x8000>>0))<<0) | ws;
   i2s.dout_bits[1+rr] = (( s & (0x8000>>1))<<1) | ws;
   i2s.dout_bits[2+rr] = (( s & (0x8000>>2))<<2) | ws;
@@ -154,6 +155,8 @@ void i2s_bits_irq(){
   i2s.dout_bits[13+rr] = (( s & (0x8000>>13))<<13) | ws;
   i2s.dout_bits[14+rr] = (( s & (0x8000>>14))<<14) | ws;
   i2s.dout_bits[15+rr] = (( s & (0x8000>>15))<<15) | ws;
+
+  i2s.buf_i = (i2s.buf_i+1)%i2s.buf_len;
 }
 
 void setup() {
@@ -182,7 +185,25 @@ void setup() {
 //   timer_attach_interrupt(kmux.timer, TIMER_UPDATE_INTERRUPT, kmux_irq);
 //   timer_enable_irq(kmux.timer, TIMER_UPDATE_INTERRUPT);
 //   timer_resume(kmux.timer);
+  
+  for(int i=0; i<128;i+=2){
+    if(i<64) {
+      i2s.buf[i] = 3000;
+      i2s.buf[i+1] = -1000;
+    }
+    else {
+      i2s.buf[i] = -1000;
+      i2s.buf[i+1] = 3000;
+    }
+  }
 
+
+  i2s.dma = DMA1;
+  i2s.dma_ch = DMA_CH4;
+  i2s.port = (void*)&(GPIOB->regs->BSRR);
+  i2s.buf_len = 128;
+  i2s.buf_i = 0;
+  
   //timer4ch2 PB7 BCK
   gpio_set_mode(GPIOB, 15, GPIO_OUTPUT_PP);
   gpio_set_mode(GPIOB, 12, GPIO_OUTPUT_PP);
@@ -195,11 +216,7 @@ void setup() {
   //timer_attach_interrupt(TIMER4, TIMER_CH2, i2s_data_irq);
   timer_resume(TIMER4);
 
-  i2s.dma = DMA1;
-  i2s.dma_ch = DMA_CH4;
-  i2s.port = (void*)&(GPIOB->regs->BSRR);
-  i2s.buf[0] = 0b1100001101011010;
-  i2s.buf[1] = 0b1000001000000010;
+
 
   dma_init(i2s.dma);
   dma_disable(i2s.dma, i2s.dma_ch);
