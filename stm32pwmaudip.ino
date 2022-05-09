@@ -39,6 +39,8 @@
 #define COMMS_RX PA10
 #define COMMS_TX PA9
 
+#define BENCH_PIN COMMS_SDA
+
 #define K_Y 0
 #define K_0 1
 #define K_DOT 2
@@ -98,13 +100,13 @@ int16_t sint[256];
 
 struct pwm_dac_t{
   dma_dev* dma;
-  dma_channel dma_ch;
+  dma_channel dma_ch_a;
+  dma_channel dma_ch_b;
 
   timer_dev* timer;
-  timer_channel timer_ch;
-  uint8_t pin;
 
-  uint16_t buf[64];
+  uint16_t buf_a[64];
+  uint16_t buf_b[64];
   uint8_t buf_len;
   uint8_t req = 0;
 } pwm_dac;
@@ -136,38 +138,45 @@ void setup() {
   timer_enable_irq(kmux.timer, TIMER_UPDATE_INTERRUPT);
   timer_resume(kmux.timer);
 
-  pwm_dac.pin = PA1;
   pwm_dac.timer = TIMER2;
-  pwm_dac.timer_ch = TIMER_CH2; 
   pwm_dac.dma = DMA1;
-  pwm_dac.dma_ch = DMA_CH7;
+  pwm_dac.dma_ch_a = DMA_CH5;
+  pwm_dac.dma_ch_b = DMA_CH7;
   pwm_dac.buf_len = 64;
 
-  pinMode(pwm_dac.pin, PWM);
+  pinMode(GP_A, PWM);
+  pinMode(GP_B, PWM);
   timer_pause(pwm_dac.timer);
   timer_set_prescaler(pwm_dac.timer, 0);
   timer_set_reload(pwm_dac.timer, 1024);
-  timer_dma_enable_req(pwm_dac.timer, pwm_dac.timer_ch);
+  timer_dma_enable_req(pwm_dac.timer, 1);
+  timer_dma_enable_req(pwm_dac.timer, 2);
   timer_resume(pwm_dac.timer);
-  __IO uint32 *tccr = &(pwm_dac.timer->regs).gen->CCR1 + (int(pwm_dac.timer_ch) - 1);
+  __IO uint32 *tccr_a = &(pwm_dac.timer->regs).gen->CCR1;
+  __IO uint32 *tccr_b = &(pwm_dac.timer->regs).gen->CCR2;
 
   dma_init(pwm_dac.dma);
-  dma_disable(pwm_dac.dma, pwm_dac.dma_ch);
+  dma_disable(pwm_dac.dma, pwm_dac.dma_ch_a);
+  dma_disable(pwm_dac.dma, pwm_dac.dma_ch_b);
   int m = DMA_TRNS_CMPLT | DMA_HALF_TRNS | DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
-  dma_setup_transfer(pwm_dac.dma, pwm_dac.dma_ch , tccr, DMA_SIZE_16BITS, pwm_dac.buf, DMA_SIZE_16BITS, m);
-  dma_set_num_transfers(pwm_dac.dma, pwm_dac.dma_ch, pwm_dac.buf_len);
-  dma_set_priority(pwm_dac.dma, pwm_dac.dma_ch, DMA_PRIORITY_HIGH);
-  dma_attach_interrupt(pwm_dac.dma, pwm_dac.dma_ch, [=](){
-    if(dma_get_irq_cause(pwm_dac.dma, pwm_dac.dma_ch) == DMA_TRANSFER_COMPLETE)
+  dma_setup_transfer(pwm_dac.dma, pwm_dac.dma_ch_a , tccr_a, DMA_SIZE_16BITS, pwm_dac.buf_a, DMA_SIZE_16BITS, m);
+  dma_setup_transfer(pwm_dac.dma, pwm_dac.dma_ch_b , tccr_b, DMA_SIZE_16BITS, pwm_dac.buf_b, DMA_SIZE_16BITS, m);
+  dma_set_num_transfers(pwm_dac.dma, pwm_dac.dma_ch_a, pwm_dac.buf_len);  
+  dma_set_num_transfers(pwm_dac.dma, pwm_dac.dma_ch_b, pwm_dac.buf_len);
+  dma_set_priority(pwm_dac.dma, pwm_dac.dma_ch_a, DMA_PRIORITY_HIGH);
+  dma_set_priority(pwm_dac.dma, pwm_dac.dma_ch_b, DMA_PRIORITY_HIGH);
+  dma_attach_interrupt(pwm_dac.dma, pwm_dac.dma_ch_a, [=](){
+    if(dma_get_irq_cause(pwm_dac.dma, pwm_dac.dma_ch_a) == DMA_TRANSFER_COMPLETE)
       pwm_dac.req = 2;
     else 
       pwm_dac.req = 1; 
   });
-  dma_enable(pwm_dac.dma, pwm_dac.dma_ch);
+  dma_enable(pwm_dac.dma, pwm_dac.dma_ch_a);
+  dma_enable(pwm_dac.dma, pwm_dac.dma_ch_b);
 
   
   Serial.println("setup complete");
-  pinMode(GP_A,OUTPUT);
+  pinMode(BENCH_PIN,OUTPUT);
 }
 
 void loop() {
@@ -180,7 +189,7 @@ void loop() {
   // delay(500);
 
   if(pwm_dac.req){
-  digitalWrite(GP_A,HIGH);
+  digitalWrite(BENCH_PIN,HIGH);
     int s = 0;
     int e = pwm_dac.buf_len>>1;
     if(pwm_dac.req == 2){
@@ -204,8 +213,9 @@ void loop() {
       auto intp = ( (s_h-s_l)*phi_dt ) >> 8;
       int spl = s_l + intp;
       spl = (spl*100 )>>8;
-      pwm_dac.buf[i] = uint16_t(spl + 512);
+      pwm_dac.buf_a[i] = uint16_t(spl + 512);
+      pwm_dac.buf_b[i] = pwm_dac.buf_a[i];
     }
-  digitalWrite(GP_A,LOW);
+  digitalWrite(BENCH_PIN,LOW);
   }
 }
