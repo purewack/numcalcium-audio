@@ -118,7 +118,7 @@ struct soft_i2s_t{
   dma_channel dma_ch_b;
 
   timer_dev* timer;
-
+  uint32_t dout_bits[32];
   uint16_t buf_a[64];
   uint16_t buf_b[64];
   uint8_t buf_len;
@@ -191,6 +191,8 @@ void setup() {
   
   Serial.println("setup complete");
   pinMode(BENCH_PIN,OUTPUT);
+
+  pinMode(COMMS_SDA, OUTPUT);
 }
 
 void loop() {
@@ -202,34 +204,39 @@ void loop() {
   // LOGL("-------");
   // delay(500);
 
-  if(i2s.req){
-  digitalWrite(BENCH_PIN,HIGH);
-    int s = 0;
-    int e = i2s.buf_len>>1;
-    if(i2s.req == 2){
-      s = i2s.buf_len>>1;
-      e = i2s.buf_len;
-    }
-    i2s.req = 0;
+  // if(i2s.req){
+  // digitalWrite(BENCH_PIN,HIGH);
+  //   int s = 0;
+  //   int e = i2s.buf_len>>1;
+  //   if(i2s.req == 2){
+  //     s = i2s.buf_len>>1;
+  //     e = i2s.buf_len;
+  //   }
+  //   i2s.req = 0;
 
-    auto a = kmux.io[4].state ? osc.acc : osc.acc*2;
+  //   auto a = kmux.io[4].state ? osc.acc : osc.acc*2;
 
-    for(int i=s; i<e; i++){
-      osc.phi += a;
-      auto phi_dt = osc.phi & 0xFF;
-      auto phi_l = osc.phi >> 8;
-      auto phi_h = (phi_l + 1);
-      phi_h = phi_h & 0xFF;
+  //   for(int i=s; i<e; i++){
+  //     osc.phi += a;
+  //     auto phi_dt = osc.phi & 0xFF;
+  //     auto phi_l = osc.phi >> 8;
+  //     auto phi_h = (phi_l + 1);
+  //     phi_h = phi_h & 0xFF;
       
-      auto s_l = osc.table[phi_l];
-      auto s_h = osc.table[phi_h];
+  //     auto s_l = osc.table[phi_l];
+  //     auto s_h = osc.table[phi_h];
       
-      auto intp = ( (s_h-s_l)*phi_dt ) >> 8;
-      int spl = s_l + intp;
-      spl = (spl*100 )>>8;
-      i2s.buf_a[i] = uint16_t(spl + 512);
-      i2s.buf_b[i] = i2s.buf_a[i];
-    }
-  digitalWrite(BENCH_PIN,LOW);
-  }
+  //     auto intp = ( (s_h-s_l)*phi_dt ) >> 8;
+  //     int spl = s_l + intp;
+  //     spl = (spl*100 )>>8;
+  //     i2s.buf_a[i] = uint16_t(spl + 512);
+  //     i2s.buf_b[i] = i2s.buf_a[i];
+  //   }
+  // digitalWrite(BENCH_PIN,LOW);
+  // }
+
+  GPIOB->regs->BSRR = 0x80;
+  delay(100);
+  GPIOB->regs->BSRR = 0x800000;
+  delay(100);
 }
