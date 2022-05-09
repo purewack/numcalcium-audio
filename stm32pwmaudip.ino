@@ -30,14 +30,18 @@
 
 #define GP_A PA0
 #define GP_B PA1
-#define COMMS_SDA PB7
+////////////////////////
+#define COMMS_SDA PB7 //BCK
 #define COMMS_SDL PB6
-#define COMMS_MOSI PB15
-#define COMMS_MISO PB14
-#define COMMS_CK   PB13
-#define COMMS_CS PB12
+////////////////////////
+#define COMMS_MOSI PB15 //DOUT - bsr.15.31
+#define COMMS_MISO PB14 
+#define COMMS_CK   PB13 
+#define COMMS_CS PB12   //WS - bsr.12.28
+///////////////////////
 #define COMMS_RX PA10
 #define COMMS_TX PA9
+////////////////////////
 
 #define BENCH_PIN COMMS_SDA
 
@@ -99,10 +103,6 @@ osc_t osc;
 int16_t sint[256];
 
 
-
-uint8_t num = 0b11010000;
-uint32_t bits[8] = {0x8000, 0x8000, 0x80000000, 0x8000,  0x80000000, 0x80000000, 0x80000000, 0x80000000};
-
 //TIM4 CH 1 = PB6
 //TIM4 CH 2 = PB7
 //TIM1 CH2  = PA9
@@ -119,16 +119,45 @@ uint32_t bits[8] = {0x8000, 0x8000, 0x80000000, 0x8000,  0x80000000, 0x80000000,
 struct soft_i2s_t{
   dma_dev* dma;
   dma_channel dma_ch;
-
   timer_dev* timer;
-  uint32_t dout_bits[32];
-  uint16_t buf_a[64];
-  uint16_t buf_b[64];
+  void* port;
+  uint32_t dout_bits[64];
+  uint16_t buf[128];
   uint8_t buf_len;
   uint8_t req = 0;
 } i2s;
+// #define COMMS_MOSI PB15 //DOUT - bsr.15.31
+// #define COMMS_MISO PB14 
+// #define COMMS_CK   PB13 
+// #define COMMS_CS PB12   //WS - bsr.12.28
+void i2s_bits_irq(){
+  auto r = dma_get_irq_cause(i2s.dma, i2s.dma_ch) == DMA_TRANSFER_COMPLETE ? 1 : 0;
+  auto rr = 16*r;
+  auto ws = (0x10000000>>rr) | 0x80000000;
+  auto s = i2s.buf[r];
+  i2s.dout_bits[0+rr] = (( s & (0x8000>>0))<<0) | ws;
+  i2s.dout_bits[1+rr] = (( s & (0x8000>>1))<<1) | ws;
+  i2s.dout_bits[2+rr] = (( s & (0x8000>>2))<<2) | ws;
+  i2s.dout_bits[3+rr] = (( s & (0x8000>>3))<<3) | ws;
+
+  i2s.dout_bits[4+rr] = (( s & (0x8000>>4))<<4) | ws;
+  i2s.dout_bits[5+rr] = (( s & (0x8000>>5))<<5) | ws;
+  i2s.dout_bits[6+rr] = (( s & (0x8000>>6))<<6) | ws;
+  i2s.dout_bits[7+rr] = (( s & (0x8000>>7))<<7) | ws;
+  
+  i2s.dout_bits[8 +rr] = (( s & (0x8000>>8 ))<<8 ) | ws;
+  i2s.dout_bits[9 +rr] = (( s & (0x8000>>9 ))<<9 ) | ws;
+  i2s.dout_bits[10+rr] = (( s & (0x8000>>10))<<10) | ws;
+  i2s.dout_bits[11+rr] = (( s & (0x8000>>11))<<11) | ws;
+  
+  i2s.dout_bits[12+rr] = (( s & (0x8000>>12))<<12) | ws;
+  i2s.dout_bits[13+rr] = (( s & (0x8000>>13))<<13) | ws;
+  i2s.dout_bits[14+rr] = (( s & (0x8000>>14))<<14) | ws;
+  i2s.dout_bits[15+rr] = (( s & (0x8000>>15))<<15) | ws;
+}
 
 void setup() {
+  disableDebugPorts();
   //Serial.begin(9600);
   //Serial.println("setup start");
   // for(int i=0; i<256; i++){
@@ -139,7 +168,6 @@ void setup() {
   // osc.acc = (256*256*f)/46875;
   // osc.phi = 0;
 
-  disableDebugPorts();
 //   for(int i=0; i<4; i++)
 //     pinMode(kmux.cols[i], INPUT_PULLDOWN);
 //   for(int i=0; i<6; i++)
@@ -157,6 +185,7 @@ void setup() {
 
   //timer4ch2 PB7 BCK
   gpio_set_mode(GPIOB, 15, GPIO_OUTPUT_PP);
+  gpio_set_mode(GPIOB, 12, GPIO_OUTPUT_PP);
   pinMode(COMMS_SDA, PWM);
   timer_pause(TIMER4);
   timer_set_prescaler(TIMER4, 0);
@@ -168,13 +197,17 @@ void setup() {
 
   i2s.dma = DMA1;
   i2s.dma_ch = DMA_CH4;
+  i2s.port = (void*)&(GPIOB->regs->BSRR);
+  i2s.buf[0] = 0b1100001101011010;
+  i2s.buf[1] = 0b1000001000000010;
 
   dma_init(i2s.dma);
   dma_disable(i2s.dma, i2s.dma_ch);
   int m = DMA_TRNS_CMPLT | DMA_HALF_TRNS | DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
-  dma_setup_transfer(i2s.dma, i2s.dma_ch , &(GPIOB->regs->BSRR), DMA_SIZE_32BITS, bits, DMA_SIZE_32BITS, m);
-  dma_set_num_transfers(i2s.dma, i2s.dma_ch, 8);  
+  dma_setup_transfer(i2s.dma, i2s.dma_ch , i2s.port, DMA_SIZE_32BITS, i2s.dout_bits, DMA_SIZE_32BITS, m);
+  dma_set_num_transfers(i2s.dma, i2s.dma_ch, 32);  
   dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_HIGH);
+  dma_attach_interrupt(i2s.dma, i2s.dma_ch, i2s_bits_irq);
   dma_enable(i2s.dma, i2s.dma_ch);
 
   
