@@ -99,6 +99,10 @@ osc_t osc;
 int16_t sint[256];
 
 
+
+uint8_t num = 0b11010000;
+uint32_t bits[8] = {0x8000, 0x8000, 0x80000000, 0x8000,  0x80000000, 0x80000000, 0x80000000, 0x80000000};
+
 //TIM4 CH 1 = PB6
 //TIM4 CH 2 = PB7
 //TIM1 CH2  = PA9
@@ -114,8 +118,7 @@ int16_t sint[256];
 //  DMA_IRQ(n)@halfbuf -> (buf -> Timer(n) -> Timer(n)CCMP_Pin)
 struct soft_i2s_t{
   dma_dev* dma;
-  dma_channel dma_ch_a;
-  dma_channel dma_ch_b;
+  dma_channel dma_ch;
 
   timer_dev* timer;
   uint32_t dout_bits[32];
@@ -126,17 +129,17 @@ struct soft_i2s_t{
 } i2s;
 
 void setup() {
-  Serial.begin(9600);
-  Serial.println("setup start");
-  for(int i=0; i<256; i++){
-    sint[i] = int16_t(512.f * sin(2.0f * 3.1415f * float(i)/256.f));
-  }
-  int f = 60;
-  osc.table = sint;
-  osc.acc = (256*256*f)/46875;
-  osc.phi = 0;
+  //Serial.begin(9600);
+  //Serial.println("setup start");
+  // for(int i=0; i<256; i++){
+  //   sint[i] = int16_t(512.f * sin(2.0f * 3.1415f * float(i)/256.f));
+  // }
+  // int f = 60;
+  // osc.table = sint;
+  // osc.acc = (256*256*f)/46875;
+  // osc.phi = 0;
 
-//  disableDebugPorts();
+  disableDebugPorts();
 //   for(int i=0; i<4; i++)
 //     pinMode(kmux.cols[i], INPUT_PULLDOWN);
 //   for(int i=0; i<6; i++)
@@ -152,47 +155,30 @@ void setup() {
 //   timer_enable_irq(kmux.timer, TIMER_UPDATE_INTERRUPT);
 //   timer_resume(kmux.timer);
 
-  // i2s.timer = TIMER2;
-  // i2s.dma = DMA1;
-  // i2s.dma_ch_a = DMA_CH5;
-  // i2s.dma_ch_b = DMA_CH7;
-  // i2s.buf_len = 64;
+  //timer4ch2 PB7 BCK
+  gpio_set_mode(GPIOB, 15, GPIO_OUTPUT_PP);
+  pinMode(COMMS_SDA, PWM);
+  timer_pause(TIMER4);
+  timer_set_prescaler(TIMER4, 0);
+  timer_set_compare(TIMER4, TIMER_CH2, 24);
+  timer_set_reload(TIMER4, 48);
+  timer_dma_enable_req(TIMER4, TIMER_CH2);
+  //timer_attach_interrupt(TIMER4, TIMER_CH2, i2s_data_irq);
+  timer_resume(TIMER4);
 
-  // pinMode(GP_A, PWM);
-  // pinMode(GP_B, PWM);
-  // timer_pause(i2s.timer);
-  // timer_set_prescaler(i2s.timer, 0);
-  // timer_set_reload(i2s.timer, 1024);
-  // timer_dma_enable_req(i2s.timer, 1);
-  // timer_dma_enable_req(i2s.timer, 2);
-  // timer_resume(i2s.timer);
-  // __IO uint32 *tccr_a = &(i2s.timer->regs).gen->CCR1;
-  // __IO uint32 *tccr_b = &(i2s.timer->regs).gen->CCR2;
+  i2s.dma = DMA1;
+  i2s.dma_ch = DMA_CH4;
 
-  // dma_init(i2s.dma);
-  // dma_disable(i2s.dma, i2s.dma_ch_a);
-  // dma_disable(i2s.dma, i2s.dma_ch_b);
-  // int m = DMA_TRNS_CMPLT | DMA_HALF_TRNS | DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
-  // dma_setup_transfer(i2s.dma, i2s.dma_ch_a , tccr_a, DMA_SIZE_16BITS, i2s.buf_a, DMA_SIZE_16BITS, m);
-  // dma_setup_transfer(i2s.dma, i2s.dma_ch_b , tccr_b, DMA_SIZE_16BITS, i2s.buf_b, DMA_SIZE_16BITS, m);
-  // dma_set_num_transfers(i2s.dma, i2s.dma_ch_a, i2s.buf_len);  
-  // dma_set_num_transfers(i2s.dma, i2s.dma_ch_b, i2s.buf_len);
-  // dma_set_priority(i2s.dma, i2s.dma_ch_a, DMA_PRIORITY_HIGH);
-  // dma_set_priority(i2s.dma, i2s.dma_ch_b, DMA_PRIORITY_HIGH);
-  // dma_attach_interrupt(i2s.dma, i2s.dma_ch_a, [=](){
-  //   if(dma_get_irq_cause(i2s.dma, i2s.dma_ch_a) == DMA_TRANSFER_COMPLETE)
-  //     i2s.req = 2;
-  //   else 
-  //     i2s.req = 1; 
-  // });
-  // dma_enable(i2s.dma, i2s.dma_ch_a);
-  // dma_enable(i2s.dma, i2s.dma_ch_b);
+  dma_init(i2s.dma);
+  dma_disable(i2s.dma, i2s.dma_ch);
+  int m = DMA_TRNS_CMPLT | DMA_HALF_TRNS | DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
+  dma_setup_transfer(i2s.dma, i2s.dma_ch , &(GPIOB->regs->BSRR), DMA_SIZE_32BITS, bits, DMA_SIZE_32BITS, m);
+  dma_set_num_transfers(i2s.dma, i2s.dma_ch, 8);  
+  dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_HIGH);
+  dma_enable(i2s.dma, i2s.dma_ch);
 
   
-  Serial.println("setup complete");
-  pinMode(BENCH_PIN,OUTPUT);
-
-  pinMode(COMMS_SDA, OUTPUT);
+  //Serial.println("setup complete");
 }
 
 void loop() {
@@ -234,9 +220,4 @@ void loop() {
   //   }
   // digitalWrite(BENCH_PIN,LOW);
   // }
-
-  GPIOB->regs->BSRR = 0x80;
-  delay(100);
-  GPIOB->regs->BSRR = 0x800000;
-  delay(100);
 }
