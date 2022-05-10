@@ -156,20 +156,22 @@ void i2s_bits_irq(){
   i2s.dout_bits[14+rr] = (( s & (0x8000>>14))<<14) | ws;
   i2s.dout_bits[15+rr] = (( s & (0x8000>>15))<<15) | ws;
 
+  if(i2s.buf_i+1 == i2s.buf_len) i2s.req = 2;
+  if(i2s.buf_i+1 == i2s.buf_len>>1) i2s.req = 1;
   i2s.buf_i = (i2s.buf_i+1)%i2s.buf_len;
 }
 
 void setup() {
   disableDebugPorts();
-  //Serial.begin(9600);
-  //Serial.println("setup start");
-  // for(int i=0; i<256; i++){
-  //   sint[i] = int16_t(512.f * sin(2.0f * 3.1415f * float(i)/256.f));
-  // }
-  // int f = 60;
-  // osc.table = sint;
-  // osc.acc = (256*256*f)/46875;
-  // osc.phi = 0;
+  Serial.begin(9600);
+  LOGL("setup start");
+  for(int i=0; i<256; i++){
+    sint[i] = int16_t(512.f * sin(2.0f * 3.1415f * float(i)/256.f));
+  }
+  int f = 60;
+  osc.table = sint;
+  osc.acc = 900;//(256*f)/30125;
+  osc.phi = 0;
 
 //   for(int i=0; i<4; i++)
 //     pinMode(kmux.cols[i], INPUT_PULLDOWN);
@@ -210,7 +212,7 @@ void setup() {
   pinMode(COMMS_SDA, PWM);
   timer_pause(TIMER4);
   timer_set_prescaler(TIMER4, 0);
-  timer_set_compare(TIMER4, TIMER_CH2, 24);
+  timer_set_compare(TIMER4, TIMER_CH2, 17);
   timer_set_reload(TIMER4, 48);
   timer_dma_enable_req(TIMER4, TIMER_CH2);
   //timer_attach_interrupt(TIMER4, TIMER_CH2, i2s_data_irq);
@@ -228,7 +230,7 @@ void setup() {
   dma_enable(i2s.dma, i2s.dma_ch);
 
   
-  //Serial.println("setup complete");
+  LOGL("setup complete");
 }
 
 void loop() {
@@ -240,34 +242,34 @@ void loop() {
   // LOGL("-------");
   // delay(500);
 
-  // if(i2s.req){
+  if(i2s.req){
   // digitalWrite(BENCH_PIN,HIGH);
-  //   int s = 0;
-  //   int e = i2s.buf_len>>1;
-  //   if(i2s.req == 2){
-  //     s = i2s.buf_len>>1;
-  //     e = i2s.buf_len;
-  //   }
-  //   i2s.req = 0;
+    int s = 0;
+    int e = i2s.buf_len>>1;
+    if(i2s.req == 2){
+      s = i2s.buf_len>>1;
+      e = i2s.buf_len;
+    }
+    i2s.req = 0;
 
-  //   auto a = kmux.io[4].state ? osc.acc : osc.acc*2;
+    auto a = osc.acc;//kmux.io[4].state ? osc.acc : osc.acc*2;
 
-  //   for(int i=s; i<e; i++){
-  //     osc.phi += a;
-  //     auto phi_dt = osc.phi & 0xFF;
-  //     auto phi_l = osc.phi >> 8;
-  //     auto phi_h = (phi_l + 1);
-  //     phi_h = phi_h & 0xFF;
+    for(int i=s; i<e; i+=2){
+      auto phi_dt = osc.phi & 0xFF;
+      auto phi_l = osc.phi >> 8;
+      auto phi_h = (phi_l + 1);
+      phi_h = phi_h & 0xFF;
       
-  //     auto s_l = osc.table[phi_l];
-  //     auto s_h = osc.table[phi_h];
+      auto s_l = osc.table[phi_l];
+      auto s_h = osc.table[phi_h];
       
-  //     auto intp = ( (s_h-s_l)*phi_dt ) >> 8;
-  //     int spl = s_l + intp;
-  //     spl = (spl*100 )>>8;
-  //     i2s.buf_a[i] = uint16_t(spl + 512);
-  //     i2s.buf_b[i] = i2s.buf_a[i];
-  //   }
+      auto intp = ( (s_h-s_l)*phi_dt ) >> 8;
+      int spl = s_l + intp;
+      spl = (spl*100 )>>8;
+      i2s.buf[i] = uint16_t(spl + 512);
+      i2s.buf[i+1] = uint16_t(spl + 512);
+      osc.phi += a;
+    }
   // digitalWrite(BENCH_PIN,LOW);
-  // }
+  }
 }
