@@ -102,7 +102,17 @@ struct osc_t{
 osc_t osc;
 int16_t sint[256];
 
+void benchSetup(){
+  pinMode(PA0, OUTPUT);
+}
 
+void benchStart(){
+  GPIOA->regs->BSRR = 1<<0;
+}
+
+void benchEnd(){
+  GPIOA->regs->BSRR = (1<<0)<<16;
+}
 //TIM4 CH 1 = PB6
 //TIM4 CH 2 = PB7
 //TIM1 CH2  = PA9
@@ -163,6 +173,7 @@ void i2s_bits_irq(){
 
 void setup() {
   disableDebugPorts();
+  benchSetup();
   Serial.begin(9600);
   LOGL("setup start");
   for(int i=0; i<256; i++){
@@ -243,7 +254,7 @@ void loop() {
   // delay(500);
 
   if(i2s.req){
-  // digitalWrite(BENCH_PIN,HIGH);
+    benchStart();
     int s = 0;
     int e = i2s.buf_len>>1;
     if(i2s.req == 2){
@@ -270,6 +281,6 @@ void loop() {
       i2s.buf[i+1] = uint16_t(spl + 512);
       osc.phi += a;
     }
-  // digitalWrite(BENCH_PIN,LOW);
+    benchEnd();
   }
 }
