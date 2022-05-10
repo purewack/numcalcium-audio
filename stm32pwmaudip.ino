@@ -43,8 +43,6 @@
 #define COMMS_TX PA9
 ////////////////////////
 
-#define BENCH_PIN COMMS_SDA
-
 #define K_Y 0
 #define K_0 1
 #define K_DOT 2
@@ -199,18 +197,6 @@ void setup() {
 //   timer_enable_irq(kmux.timer, TIMER_UPDATE_INTERRUPT);
 //   timer_resume(kmux.timer);
   
-  for(int i=0; i<128;i+=2){
-    if(i<64) {
-      i2s.buf[i] = 3000;
-      i2s.buf[i+1] = -1000;
-    }
-    else {
-      i2s.buf[i] = -1000;
-      i2s.buf[i+1] = 3000;
-    }
-  }
-
-
   i2s.dma = DMA1;
   i2s.dma_ch = DMA_CH4;
   i2s.port = (void*)&(GPIOB->regs->BSRR);
@@ -224,7 +210,7 @@ void setup() {
   timer_pause(TIMER4);
   timer_set_prescaler(TIMER4, 0);
   timer_set_compare(TIMER4, TIMER_CH2, 17);
-  timer_set_reload(TIMER4, 48);
+  timer_set_reload(TIMER4, 48-1);
   timer_dma_enable_req(TIMER4, TIMER_CH2);
   //timer_attach_interrupt(TIMER4, TIMER_CH2, i2s_data_irq);
   timer_resume(TIMER4);
@@ -266,6 +252,7 @@ void loop() {
     auto a = osc.acc;//kmux.io[4].state ? osc.acc : osc.acc*2;
 
     for(int i=s; i<e; i+=2){
+      osc.phi += a;
       auto phi_dt = osc.phi & 0xFF;
       auto phi_l = osc.phi >> 8;
       auto phi_h = (phi_l + 1);
@@ -279,7 +266,6 @@ void loop() {
       spl = (spl*100 )>>8;
       i2s.buf[i] = uint16_t(spl + 512);
       i2s.buf[i+1] = uint16_t(spl + 512);
-      osc.phi += a;
     }
     benchEnd();
   }
