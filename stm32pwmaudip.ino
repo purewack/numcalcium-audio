@@ -4,7 +4,19 @@
 #include <libmaple/gpio.h>
 #include "boards.h"
 #include "io.h"
+
+#define DEBUG
+#define VERBOSE
 #define LOGL(X) Serial.println(X)
+#define LOGNL(X) Serial.print(X)
+#include "libintdsp/libintdsp.h"
+#include "libintdsp/osc_t.h"
+#include "libintdsp/private/libintdsp.cpp"
+#include "libintdsp/private/nodes.cpp"
+agraph_t gg;
+int16_t spl_out_a,spl_out_b;
+
+
 #define SYS_PDOWN PB5
 
 #define LCD_LIGHT PA6
@@ -91,14 +103,6 @@ void kmux_irq(){
   kmux.row = (kmux.row+1)%5;
 }
 
-struct osc_t{
-  uint16_t phi;
-  uint16_t acc;
-  int16_t* table;
-};
-
-osc_t osc;
-int16_t sint[256];
 
 void benchSetup(){
   pinMode(PA0, OUTPUT);
@@ -174,13 +178,38 @@ void setup() {
   benchSetup();
   Serial.begin(9600);
   LOGL("setup start");
-  for(int i=0; i<256; i++){
-    sint[i] = int16_t(512.f * sin(2.0f * 3.1415f * float(i)/256.f));
-  }
-  int f = 60;
-  osc.table = sint;
-  osc.acc = 900;//(256*f)/30125;
-  osc.phi = 0;
+  
+  libintdsp_init(&gg);  
+  auto os1 = new_osc(&gg,"osca");
+  auto os2 = new_osc(&gg,"oscb");
+    auto* os1_params = (osc_t*)os1->processor;
+    auto* os2_params = (osc_t*)os2->processor;
+    os1_params->acc = 1800;
+    os2_params->acc = 1200;
+    os1_params->gain = 20;
+    os2_params->gain = 20;
+
+  auto* os3 = new_osc(&gg,"oscc");
+    auto* os3_params = (osc_t*)os3->processor;
+    os3_params->acc = 750;
+    os3_params->gain = 30;
+    
+  auto* lfo = new_osc(&gg,"lfo");
+    auto* lfo_params = (osc_t*)lfo->processor;
+    lfo_params->acc = 4;
+    lfo_params->bias = 1500;
+    lfo_params->gain = 5;
+    lfo_params->table = sint;
+
+  auto* dac = new_dac(&gg,"dac",&spl_out_a);
+  auto* dac2 = new_dac(&gg,"dac2",&spl_out_b);
+
+  LOGL("connecting");
+  connect(&gg,os1,dac);
+  connect(&gg,os2,dac);
+  connect(&gg,os3,dac2);
+  connect(&gg,lfo,os3);
+  LOGL("connected");
 
   for(int i=0; i<4; i++)
     pinMode(kmux.cols[i], INPUT_PULLDOWN);
@@ -214,8 +243,6 @@ void setup() {
   timer_dma_enable_req(TIMER4, TIMER_CH2);
   timer_resume(TIMER4);
 
-
-
   dma_init(i2s.dma);
   dma_disable(i2s.dma, i2s.dma_ch);
   int m = DMA_TRNS_CMPLT | DMA_HALF_TRNS | DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
@@ -248,23 +275,10 @@ void loop() {
     }
     i2s.req = 0;
 
-    auto a = kmux.io[4].state ? osc.acc>>1 : osc.acc;
-
     for(int i=s; i<e; i+=2){
-      osc.phi += a;
-      auto phi_dt = osc.phi & 0xFF;
-      auto phi_l = osc.phi >> 8;
-      auto phi_h = (phi_l + 1);
-      phi_h = phi_h & 0xFF;
-      
-      auto s_l = osc.table[phi_l];
-      auto s_h = osc.table[phi_h];
-      
-      auto intp = ( (s_h-s_l)*phi_dt ) >> 8;
-      int spl = s_l + intp;
-      spl = (spl*100 )>>8;
-      i2s.buf[i] = uint16_t(spl + 512);
-      i2s.buf[i+1] = uint16_t(spl + 512);
+      proc_graph(&gg);
+      i2s.buf[i] = spl_out_a;
+      i2s.buf[i+1] = spl_out_b;
     }
     benchEnd();
   }
