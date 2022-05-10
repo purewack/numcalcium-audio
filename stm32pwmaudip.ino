@@ -182,20 +182,20 @@ void setup() {
   osc.acc = 900;//(256*f)/30125;
   osc.phi = 0;
 
-//   for(int i=0; i<4; i++)
-//     pinMode(kmux.cols[i], INPUT_PULLDOWN);
-//   for(int i=0; i<6; i++)
-//     pinMode(kmux.rows[i], OUTPUT);
+  for(int i=0; i<4; i++)
+    pinMode(kmux.cols[i], INPUT_PULLDOWN);
+  for(int i=0; i<6; i++)
+    pinMode(kmux.rows[i], OUTPUT);
 
-//   kmux.itr = 0;
-//   kmux.timer = TIMER3;
-//   timer_pause(kmux.timer);
-//   //48M / 48 / 2000 = 25hz*20keys
-//   timer_set_prescaler(kmux.timer, 48);
-//   timer_set_reload(kmux.timer, 2000);
-//   timer_attach_interrupt(kmux.timer, TIMER_UPDATE_INTERRUPT, kmux_irq);
-//   timer_enable_irq(kmux.timer, TIMER_UPDATE_INTERRUPT);
-//   timer_resume(kmux.timer);
+  kmux.itr = 0;
+  kmux.timer = TIMER3;
+  timer_pause(kmux.timer);
+  //48M / 48 / 2000 = 25hz*20keys
+  timer_set_prescaler(kmux.timer, 48);
+  timer_set_reload(kmux.timer, 2000);
+  timer_attach_interrupt(kmux.timer, TIMER_UPDATE_INTERRUPT, kmux_irq);
+  timer_enable_irq(kmux.timer, TIMER_UPDATE_INTERRUPT);
+  timer_resume(kmux.timer);
   
   i2s.dma = DMA1;
   i2s.dma_ch = DMA_CH4;
@@ -212,7 +212,6 @@ void setup() {
   timer_set_compare(TIMER4, TIMER_CH2, 17);
   timer_set_reload(TIMER4, 48-1);
   timer_dma_enable_req(TIMER4, TIMER_CH2);
-  //timer_attach_interrupt(TIMER4, TIMER_CH2, i2s_data_irq);
   timer_resume(TIMER4);
 
 
@@ -249,7 +248,7 @@ void loop() {
     }
     i2s.req = 0;
 
-    auto a = osc.acc;//kmux.io[4].state ? osc.acc : osc.acc*2;
+    auto a = kmux.io[4].state ? osc.acc>>1 : osc.acc;
 
     for(int i=s; i<e; i+=2){
       osc.phi += a;
