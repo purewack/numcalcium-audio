@@ -174,7 +174,7 @@ void i2s_bits_irq(){
   i2s.buf_i = (i2s.buf_i+1)%i2s.buf_len;
 }
 
-adr_t* adr1;
+node_t* adr1;
 void setup() {
   disableDebugPorts();
   benchSetup();
@@ -208,16 +208,20 @@ void setup() {
     lfo_params->gain = 5;
     lfo_params->table = sint;
 
-  adr1 = new_adr(gg, "adr1");
-  set_adr_attack(ard1, 1000, 32000);
-  set_adr_release(ard1, 500, 32000);
+  adr1 = new_adr(&gg, "adr1");
+  set_adr_attack_ms((adr_t*)(adr1->processor), 1000, 32000);
+  set_adr_release_ms((adr_t*)(adr1->processor), 500, 32000);
 
   LOGL("connecting");
   connect(&gg,os1,adr1);
   connect(&gg,os2,adr1);
-  connect(&gg,adr,dac);
+  connect(&gg,adr1,dac);
   connect(&gg,os3,dac2);
   connect(&gg,lfo,os3);
+
+  // connect(&gg,os1,dac2);
+  // connect(&gg,os1,adr1);
+  // connect(&gg,adr1,dac);
   LOGL("connected");
 
 
@@ -290,7 +294,7 @@ void loop() {
     }
     i2s.req = 0;
 
-    adr.state = kmux.io[0].state;
+    ((adr_t*)(adr1->processor))->state = kmux.io[0].state;
 
     for(int i=s; i<e; i+=2){
       proc_graph(&gg);
