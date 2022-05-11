@@ -11,6 +11,7 @@
 #define LOGNL(X) Serial.print(X)
 #include "libintdsp/libintdsp.h"
 #include "libintdsp/osc_t.h"
+#include "libintdsp/adr_t.h"
 #include "libintdsp/private/libintdsp.cpp"
 #include "libintdsp/private/nodes.cpp"
 agraph_t gg;
@@ -173,13 +174,19 @@ void i2s_bits_irq(){
   i2s.buf_i = (i2s.buf_i+1)%i2s.buf_len;
 }
 
+adr_t* adr1;
 void setup() {
   disableDebugPorts();
   benchSetup();
   Serial.begin(9600);
   LOGL("setup start");
-  
+
+//////////////////////////// 
+
   libintdsp_init(&gg);  
+  auto* dac = new_dac(&gg,"dac",&spl_out_a);
+  auto* dac2 = new_dac(&gg,"dac2",&spl_out_b);
+
   auto os1 = new_osc(&gg,"osca");
   auto os2 = new_osc(&gg,"oscb");
     auto* os1_params = (osc_t*)os1->processor;
@@ -201,15 +208,20 @@ void setup() {
     lfo_params->gain = 5;
     lfo_params->table = sint;
 
-  auto* dac = new_dac(&gg,"dac",&spl_out_a);
-  auto* dac2 = new_dac(&gg,"dac2",&spl_out_b);
+  adr1 = new_adr(gg, "adr1");
+  set_adr_attack(ard1, 1000, 32000);
+  set_adr_release(ard1, 500, 32000);
 
   LOGL("connecting");
-  connect(&gg,os1,dac);
-  connect(&gg,os2,dac);
+  connect(&gg,os1,adr1);
+  connect(&gg,os2,adr1);
+  connect(&gg,adr,dac);
   connect(&gg,os3,dac2);
   connect(&gg,lfo,os3);
   LOGL("connected");
+
+
+///////////////////
 
   for(int i=0; i<4; i++)
     pinMode(kmux.cols[i], INPUT_PULLDOWN);
@@ -226,6 +238,9 @@ void setup() {
   timer_enable_irq(kmux.timer, TIMER_UPDATE_INTERRUPT);
   timer_resume(kmux.timer);
   
+///////////////////////
+
+
   i2s.dma = DMA1;
   i2s.dma_ch = DMA_CH4;
   i2s.port = (void*)&(GPIOB->regs->BSRR);
@@ -251,7 +266,7 @@ void setup() {
   dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_HIGH);
   dma_attach_interrupt(i2s.dma, i2s.dma_ch, i2s_bits_irq);
   dma_enable(i2s.dma, i2s.dma_ch);
-
+//////////////////////
   
   LOGL("setup complete");
 }
@@ -274,6 +289,8 @@ void loop() {
       e = i2s.buf_len;
     }
     i2s.req = 0;
+
+    adr.state = kmux.io[0].state;
 
     for(int i=s; i<e; i+=2){
       proc_graph(&gg);
