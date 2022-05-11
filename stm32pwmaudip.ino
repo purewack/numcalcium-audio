@@ -146,8 +146,8 @@ struct soft_i2s_t{
 // #define COMMS_CS PB12   //WS - bsr.12.28
 void i2s_bits_irq(){
   auto r = dma_get_irq_cause(i2s.dma, i2s.dma_ch) == DMA_TRANSFER_COMPLETE ? 1 : 0;
-  auto rr = 16*r;
-  auto ws = (0x10000000>>rr) | 0x80000000;
+  auto rr = 24*r;
+  auto ws = 0x90000000 | (0x1000*r);
   auto s = i2s.buf[i2s.buf_i];
   i2s.dout_bits[0+rr] = (( s & (0x8000>>0))<<0) | ws;
   i2s.dout_bits[1+rr] = (( s & (0x8000>>1))<<1) | ws;
@@ -168,6 +168,15 @@ void i2s_bits_irq(){
   i2s.dout_bits[13+rr] = (( s & (0x8000>>13))<<13) | ws;
   i2s.dout_bits[14+rr] = (( s & (0x8000>>14))<<14) | ws;
   i2s.dout_bits[15+rr] = (( s & (0x8000>>15))<<15) | ws;
+  
+  i2s.dout_bits[16+rr] = ws;
+  i2s.dout_bits[17+rr] = ws;
+  i2s.dout_bits[18+rr] = ws;
+  i2s.dout_bits[19+rr] = ws;
+  i2s.dout_bits[20+rr] = ws;
+  i2s.dout_bits[21+rr] = ws;
+  i2s.dout_bits[22+rr] = ws;
+  i2s.dout_bits[23+rr] = ws;
 
   if(i2s.buf_i+1 == i2s.buf_len) i2s.req = 2;
   if(i2s.buf_i+1 == i2s.buf_len>>1) i2s.req = 1;
@@ -214,7 +223,7 @@ void setup() {
 
   LOGL("connecting");
   connect(&gg,os1,adr1);
-  connect(&gg,os2,adr1);
+  connect(&gg,os2,dac);
   connect(&gg,adr1,dac);
   connect(&gg,os3,dac2);
   connect(&gg,lfo,os3);
@@ -250,23 +259,31 @@ void setup() {
   i2s.port = (void*)&(GPIOB->regs->BSRR);
   i2s.buf_len = 128;
   i2s.buf_i = 0;
-  
+
+  pinMode(GP_B, PWM);
+  timer_pause(TIMER2);
+  timer_set_prescaler(TIMER2, 0);
+  timer_set_compare(TIMER2, TIMER_CH2, 3);
+  timer_set_reload(TIMER2, 6-1);
+  timer_dma_enable_req(TIMER2, TIMER_CH2);
+
   //timer4ch2 PB7 BCK
   gpio_set_mode(GPIOB, 15, GPIO_OUTPUT_PP);
   gpio_set_mode(GPIOB, 12, GPIO_OUTPUT_PP);
   pinMode(COMMS_SDA, PWM);
   timer_pause(TIMER4);
   timer_set_prescaler(TIMER4, 0);
-  timer_set_compare(TIMER4, TIMER_CH2, 17);
-  timer_set_reload(TIMER4, 48-1);
+  timer_set_compare(TIMER4, TIMER_CH2, 12);
+  timer_set_reload(TIMER4, 31);
   timer_dma_enable_req(TIMER4, TIMER_CH2);
   timer_resume(TIMER4);
+  timer_resume(TIMER2);
 
   dma_init(i2s.dma);
   dma_disable(i2s.dma, i2s.dma_ch);
   int m = DMA_TRNS_CMPLT | DMA_HALF_TRNS | DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
   dma_setup_transfer(i2s.dma, i2s.dma_ch , i2s.port, DMA_SIZE_32BITS, i2s.dout_bits, DMA_SIZE_32BITS, m);
-  dma_set_num_transfers(i2s.dma, i2s.dma_ch, 32);  
+  dma_set_num_transfers(i2s.dma, i2s.dma_ch, 48);  
   dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_HIGH);
   dma_attach_interrupt(i2s.dma, i2s.dma_ch, i2s_bits_irq);
   dma_enable(i2s.dma, i2s.dma_ch);
