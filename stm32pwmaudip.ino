@@ -132,10 +132,13 @@ void benchEnd(){
 struct soft_i2s_t{
   dma_dev* dma;
   dma_channel dma_ch;
+  dma_channel dma_ch_in;
   timer_dev* timer;
   void* port;
   uint32_t dout_bits[64];
+  uint32_t din_bits[64];
   uint16_t buf[128];
+  uint16_t buf_in[128];
   uint8_t buf_len;
   uint8_t buf_i;
   uint8_t req = 0;
@@ -178,10 +181,34 @@ void i2s_bits_irq(){
   i2s.dout_bits[22+rr] = ws;
   i2s.dout_bits[23+rr] = ws;
 
+  auto in = 0;
+  in |= (i2s.din_bits[0 +rr] & (0x4000)) << 1;
+  in |= (i2s.din_bits[1 +rr] & (0x4000)) << 0;
+  in |= (i2s.din_bits[2 +rr] & (0x4000)) >> 1;
+  in |= (i2s.din_bits[3 +rr] & (0x4000)) >> 2;
+
+  in |= (i2s.din_bits[4 +rr] & (0x4000)) >> 3;
+  in |= (i2s.din_bits[5 +rr] & (0x4000)) >> 4;
+  in |= (i2s.din_bits[6 +rr] & (0x4000)) >> 5;
+  in |= (i2s.din_bits[7 +rr] & (0x4000)) >> 6;
+
+  in |= (i2s.din_bits[8 +rr] & (0x4000)) >> 7;
+  in |= (i2s.din_bits[9 +rr] & (0x4000)) >> 8;
+  in |= (i2s.din_bits[10+rr] & (0x4000)) >> 9;
+  in |= (i2s.din_bits[11+rr] & (0x4000)) >> 10;
+
+  in |= (i2s.din_bits[12+rr] & (0x4000)) >> 11;
+  in |= (i2s.din_bits[13+rr] & (0x4000)) >> 12;
+  in |= (i2s.din_bits[14+rr] & (0x4000)) >> 13;
+  in |= (i2s.din_bits[15+rr] & (0x4000)) >> 14;
+
+  i2s.buf_in[i2s.buf_i] = in;
+
   if(i2s.buf_i+1 == i2s.buf_len) i2s.req = 2;
   if(i2s.buf_i+1 == i2s.buf_len>>1) i2s.req = 1;
   i2s.buf_i = (i2s.buf_i+1)%i2s.buf_len;
 }
+
 
 node_t* adr1;
 void setup() {
@@ -256,6 +283,7 @@ void setup() {
 
   i2s.dma = DMA1;
   i2s.dma_ch = DMA_CH4;
+  i2s.dma_ch_in = DMA_CH6;
   i2s.port = (void*)&(GPIOB->regs->BSRR);
   i2s.buf_len = 128;
   i2s.buf_i = 0;
@@ -276,7 +304,16 @@ void setup() {
   timer_set_compare(TIMER4, TIMER_CH2, 12);
   timer_set_reload(TIMER4, 31);
   timer_dma_enable_req(TIMER4, TIMER_CH2);
+  
+  pinMode(COMMS_MISO, INPUT);
+  timer_pause(TIMER1);
+  timer_set_prescaler(TIMER1, 0);
+  timer_set_compare(TIMER1, TIMER_CH3, 12);
+  timer_set_reload(TIMER1, 31);
+  timer_dma_enable_req(TIMER1, TIMER_CH3 );
+  
   timer_resume(TIMER4);
+  timer_resume(TIMER1);
   timer_resume(TIMER2);
 
   dma_init(i2s.dma);
@@ -286,7 +323,14 @@ void setup() {
   dma_set_num_transfers(i2s.dma, i2s.dma_ch, 48);  
   dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_HIGH);
   dma_attach_interrupt(i2s.dma, i2s.dma_ch, i2s_bits_irq);
+
+  int n = DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
+  dma_setup_transfer(i2s.dma, i2s.dma_ch_in, (void*)&(GPIOA->regs->IDR), DMA_SIZE_32BITS, i2s.din_bits, DMA_SIZE_32BITS, n);
+  dma_set_num_transfers(i2s.dma, i2s.dma_ch_in, 48);  
+  dma_set_priority(i2s.dma, i2s.dma_ch_in, DMA_PRIORITY_MEDIUM);
+  
   dma_enable(i2s.dma, i2s.dma_ch);
+  dma_enable(i2s.dma, i2s.dma_ch_in);
 //////////////////////
   
   LOGL("setup complete");
@@ -315,7 +359,7 @@ void loop() {
 
     for(int i=s; i<e; i+=2){
       proc_graph(&gg);
-      i2s.buf[i] = spl_out_a;
+      i2s.buf[i] = i2s.buf_in[i];
       i2s.buf[i+1] = spl_out_b;
     }
     benchEnd();
