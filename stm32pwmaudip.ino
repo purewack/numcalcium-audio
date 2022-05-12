@@ -137,8 +137,8 @@ struct soft_i2s_t{
   void* port;
   uint32_t dout_bits[48];
   uint16_t din_bits[48];
-  uint16_t buf[128];
-  uint16_t buf_in[128];
+  int16_t buf[128];
+  int16_t buf_in[128];
   uint8_t buf_len;
   uint8_t buf_i;
   uint8_t req = 0;
@@ -148,7 +148,7 @@ struct soft_i2s_t{
 // #define COMMS_CK   PB13 
 // #define COMMS_CS PB12   //WS - bsr.12.28
 void i2s_bits_irq(){
-  auto r = dma_get_irq_cause(i2s.dma, i2s.dma_ch) == DMA_TRANSFER_COMPLETE ? 1 : 0;
+  auto r = dma_get_irq_cause(i2s.dma, i2s.dma_ch_in) == DMA_TRANSFER_COMPLETE ? 1 : 0;
   auto rr = 24*r;
   auto ws = 0x90000000 | (0x1000*r);
   auto s = i2s.buf[i2s.buf_i];
@@ -181,26 +181,31 @@ void i2s_bits_irq(){
   i2s.dout_bits[22+rr] = ws;
   i2s.dout_bits[23+rr] = ws;
 
-  auto in = 0;
-  in |= (i2s.din_bits[0 +rr] & (0x4000)) << 1;
-  in |= (i2s.din_bits[1 +rr] & (0x4000)) << 0;
-  in |= (i2s.din_bits[2 +rr] & (0x4000)) >> 1;
-  in |= (i2s.din_bits[3 +rr] & (0x4000)) >> 2;
-
-  in |= (i2s.din_bits[4 +rr] & (0x4000)) >> 3;
-  in |= (i2s.din_bits[5 +rr] & (0x4000)) >> 4;
-  in |= (i2s.din_bits[6 +rr] & (0x4000)) >> 5;
-  in |= (i2s.din_bits[7 +rr] & (0x4000)) >> 6;
-
-  in |= (i2s.din_bits[8 +rr] & (0x4000)) >> 7;
-  in |= (i2s.din_bits[9 +rr] & (0x4000)) >> 8;
-  in |= (i2s.din_bits[10+rr] & (0x4000)) >> 9;
-  in |= (i2s.din_bits[11+rr] & (0x4000)) >> 10;
-
-  in |= (i2s.din_bits[12+rr] & (0x4000)) >> 11;
-  in |= (i2s.din_bits[13+rr] & (0x4000)) >> 12;
-  in |= (i2s.din_bits[14+rr] & (0x4000)) >> 13;
-  in |= (i2s.din_bits[15+rr] & (0x4000)) >> 14;
+  int16_t in = 0;
+  in |= ((i2s.din_bits[0+rr] & 0x400) << 1);
+  in |= ((i2s.din_bits[1+rr] & 0x400) << 0);
+  in |= ((i2s.din_bits[2+rr] & 0x400) >> 1);
+  in |= ((i2s.din_bits[3+rr] & 0x400) >> 2);
+  in |= ((i2s.din_bits[4+rr] & 0x400) >> 3);
+  in |= ((i2s.din_bits[5+rr] & 0x400) >> 4);
+  in |= ((i2s.din_bits[6+rr] & 0x400) >> 4);
+  in |= ((i2s.din_bits[7+rr] & 0x400) >> 4);
+  // in |= ((i2s.din_bits[0+rr] & (0x400)) << 5);
+  // in |= ((i2s.din_bits[1+rr] & (0x400)) << 4);
+  // in |= ((i2s.din_bits[2+rr] & (0x400)) << 3);
+  // in |= ((i2s.din_bits[3+rr] & (0x400)) << 2);
+  // in |= ((i2s.din_bits[4+rr] & (0x400)) << 1);
+  // in |= ((i2s.din_bits[5+rr] & (0x400)) );
+  // in |= ((i2s.din_bits[6+rr] & (0x400)) >> 1);
+  // in |= ((i2s.din_bits[7+rr] & (0x400)) >> 2);
+  // in |= ((i2s.din_bits[8+rr] & (0x400)) >> 3);
+  // in |= ((i2s.din_bits[9+rr] & (0x400)) >> 4);
+  // in |= ((i2s.din_bits[10+rr] & (0x400)) >> 5);
+  // in |= ((i2s.din_bits[11+rr] & (0x400)) >> 6);
+  // in |= ((i2s.din_bits[12+rr] & (0x400)) >> 7);
+  // in |= ((i2s.din_bits[13+rr] & (0x400)) >> 8);
+  // in |= ((i2s.din_bits[14+rr] & (0x400)) >> 9);
+  // in |= ((i2s.din_bits[15+rr] & (0x400)) >> 10);
 
   i2s.buf_in[i2s.buf_i] = in;
 
@@ -305,29 +310,30 @@ void setup() {
   timer_set_reload(TIMER4, 31);
   timer_dma_enable_req(TIMER4, TIMER_CH2);
   
-  pinMode(COMMS_MISO, INPUT);
-  // timer_pause(TIMER1);
-  // timer_set_prescaler(TIMER1, 0);
-  // timer_set_compare(TIMER1, TIMER_CH3, 12);
-  // timer_set_reload(TIMER1, 31);
-  // timer_dma_enable_req(TIMER1, TIMER_CH3 );
+  gpio_set_mode(GPIOA, 10, GPIO_INPUT_PD);
+  timer_pause(TIMER1);
+  timer_set_prescaler(TIMER1, 0);
+  timer_set_compare(TIMER1, TIMER_CH3, 12);
+  timer_set_reload(TIMER1, 31);
+  timer_dma_enable_req(TIMER1, TIMER_CH3 );
   
   timer_resume(TIMER4);
-  // timer_resume(TIMER1);
+  timer_resume(TIMER1);
   timer_resume(TIMER2);
 
   dma_init(i2s.dma);
   dma_disable(i2s.dma, i2s.dma_ch);
-  int m = DMA_TRNS_CMPLT | DMA_HALF_TRNS | DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
+  int m = DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
   dma_setup_transfer(i2s.dma, i2s.dma_ch , i2s.port, DMA_SIZE_32BITS, i2s.dout_bits, DMA_SIZE_32BITS, m);
   dma_set_num_transfers(i2s.dma, i2s.dma_ch, 48);  
   dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_HIGH);
-  dma_attach_interrupt(i2s.dma, i2s.dma_ch, i2s_bits_irq);
+  // dma_attach_interrupt(i2s.dma, i2s.dma_ch, i2s_bits_irq);
 
-  int n = DMA_CIRC_MODE | DMA_MINC_MODE;
-  dma_setup_transfer(i2s.dma, i2s.dma_ch, (void*)&(GPIOA->regs->IDR), DMA_SIZE_16BITS, i2s.din_bits, DMA_SIZE_16BITS, n);
-  dma_set_num_transfers(i2s.dma, i2s.dma_ch, 48);  
-  dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_MEDIUM);
+  int n = DMA_TRNS_CMPLT | DMA_HALF_TRNS | DMA_CIRC_MODE | DMA_MINC_MODE;
+  dma_setup_transfer(i2s.dma, i2s.dma_ch_in, (void*)&(GPIOA->regs->IDR), DMA_SIZE_32BITS, i2s.din_bits, DMA_SIZE_16BITS, n);
+  dma_set_num_transfers(i2s.dma, i2s.dma_ch_in, 48);  
+  dma_set_priority(i2s.dma, i2s.dma_ch_in, DMA_PRIORITY_MEDIUM);
+  dma_attach_interrupt(i2s.dma, i2s.dma_ch_in, i2s_bits_irq);
   
   dma_enable(i2s.dma, i2s.dma_ch);
   dma_enable(i2s.dma, i2s.dma_ch_in);
@@ -360,7 +366,7 @@ void loop() {
     for(int i=s; i<e; i+=2){
       proc_graph(&gg);
       i2s.buf[i] = i2s.buf_in[i];
-      i2s.buf[i+1] = spl_out_b;
+      i2s.buf[i+1] = spl_out_b + spl_out_a;
     }
     benchEnd();
   }
