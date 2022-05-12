@@ -135,8 +135,8 @@ struct soft_i2s_t{
   dma_channel dma_ch_in;
   timer_dev* timer;
   void* port;
-  uint32_t dout_bits[64];
-  uint32_t din_bits[64];
+  uint32_t dout_bits[48];
+  uint16_t din_bits[48];
   uint16_t buf[128];
   uint16_t buf_in[128];
   uint8_t buf_len;
@@ -306,14 +306,14 @@ void setup() {
   timer_dma_enable_req(TIMER4, TIMER_CH2);
   
   pinMode(COMMS_MISO, INPUT);
-  timer_pause(TIMER1);
-  timer_set_prescaler(TIMER1, 0);
-  timer_set_compare(TIMER1, TIMER_CH3, 12);
-  timer_set_reload(TIMER1, 31);
-  timer_dma_enable_req(TIMER1, TIMER_CH3 );
+  // timer_pause(TIMER1);
+  // timer_set_prescaler(TIMER1, 0);
+  // timer_set_compare(TIMER1, TIMER_CH3, 12);
+  // timer_set_reload(TIMER1, 31);
+  // timer_dma_enable_req(TIMER1, TIMER_CH3 );
   
   timer_resume(TIMER4);
-  timer_resume(TIMER1);
+  // timer_resume(TIMER1);
   timer_resume(TIMER2);
 
   dma_init(i2s.dma);
@@ -324,10 +324,10 @@ void setup() {
   dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_HIGH);
   dma_attach_interrupt(i2s.dma, i2s.dma_ch, i2s_bits_irq);
 
-  int n = DMA_FROM_MEM | DMA_CIRC_MODE | DMA_MINC_MODE;
-  dma_setup_transfer(i2s.dma, i2s.dma_ch_in, (void*)&(GPIOA->regs->IDR), DMA_SIZE_32BITS, i2s.din_bits, DMA_SIZE_32BITS, n);
-  dma_set_num_transfers(i2s.dma, i2s.dma_ch_in, 48);  
-  dma_set_priority(i2s.dma, i2s.dma_ch_in, DMA_PRIORITY_MEDIUM);
+  int n = DMA_CIRC_MODE | DMA_MINC_MODE;
+  dma_setup_transfer(i2s.dma, i2s.dma_ch, (void*)&(GPIOA->regs->IDR), DMA_SIZE_16BITS, i2s.din_bits, DMA_SIZE_16BITS, n);
+  dma_set_num_transfers(i2s.dma, i2s.dma_ch, 48);  
+  dma_set_priority(i2s.dma, i2s.dma_ch, DMA_PRIORITY_MEDIUM);
   
   dma_enable(i2s.dma, i2s.dma_ch);
   dma_enable(i2s.dma, i2s.dma_ch_in);
