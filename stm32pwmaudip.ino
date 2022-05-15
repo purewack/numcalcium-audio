@@ -12,6 +12,7 @@
 #include "libintdsp/libintdsp.h"
 #include "libintdsp/osc_t.h"
 #include "libintdsp/adr_t.h"
+#include "libintdsp/lpf_t.h"
 #include "libintdsp/private/libintdsp.cpp"
 #include "libintdsp/private/nodes.cpp"
 agraph_t gg;
@@ -173,6 +174,7 @@ void i2s_bits_irq(){
 
 
 node_t* adr1;
+node_t* lpf1;
 void setup() {
   disableDebugPorts();
   benchSetup();
@@ -193,6 +195,7 @@ void setup() {
     os2_params->acc = 1200;
     os1_params->gain = 20;
     os2_params->gain = 20;
+    os2_params->table = sawt;
 
   auto* os3 = new_osc(&gg,"oscc");
     auto* os3_params = (osc_t*)os3->processor;
@@ -204,15 +207,17 @@ void setup() {
     lfo_params->acc = 4;
     lfo_params->bias = 1500;
     lfo_params->gain = 5;
-    lfo_params->table = sint;
 
+  lpf1 = new_lpf(&gg,"lpf");
+    
   adr1 = new_adr(&gg, "adr1");
-  set_adr_attack_ms((adr_t*)(adr1->processor), 1000, 32000);
-  set_adr_release_ms((adr_t*)(adr1->processor), 500, 32000);
+  set_adr_attack_ms((adr_t*)(adr1->processor), 1000, 31250);
+  set_adr_release_ms((adr_t*)(adr1->processor), 500, 31250);
 
   LOGL("connecting");
   connect(&gg,os1,adr1);
-  connect(&gg,os2,dac);
+  connect(&gg,os2,lpf1);
+  connect(&gg,lpf1,dac);
   connect(&gg,adr1,dac);
   connect(&gg,os3,dac2);
   connect(&gg,lfo,os3);
@@ -290,6 +295,7 @@ void loop() {
     i2s.req = 0;
 
     ((adr_t*)(adr1->processor))->state = kmux.io[0].state;
+    set_lpf_freq((lpf_t*)(lpf1->processor), kmux.io[1].state ? 8000 : 20000, 31250);
 
     for(int i=s; i<e; i+=2){
       proc_graph(&gg);
