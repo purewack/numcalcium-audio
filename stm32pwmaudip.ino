@@ -10,11 +10,14 @@
 #define LOGL(X) Serial.println(X)
 #define LOGNL(X) Serial.print(X)
 #include "libintdsp/libintdsp.h"
-#include "libintdsp/osc_t.h"
-#include "libintdsp/adr_t.h"
-#include "libintdsp/lpf_t.h"
-#include "libintdsp/private/libintdsp.cpp"
-#include "libintdsp/private/nodes.cpp"
+#include "libintdsp/config.h"
+#include "libintdsp/_source/types.h"
+#include "libintdsp/_source/dsp.h"
+#include "libintdsp/_source/lifecycle.h"
+#include "libintdsp/_source/tables.h"
+#include "libintdsp/_source/init.c"
+#include "libintdsp/_source/graph.c"
+#include "libintdsp/_source/nodes.c"
 agraph_t gg;
 int16_t spl_out_a,spl_out_b;
 
@@ -232,6 +235,9 @@ void i2s_bits_irq(){
   i2s.buf_i = (i2s.buf_i+1)%i2s.buf_len;
 }
 
+int16_t sin_setup(int16_t p){
+  return int16_t(sin(2.f*3.1415f * float(p)/float(LUT_COUNT)));
+}
 
 node_t* adr1;
 node_t* lpf1;
@@ -243,7 +249,7 @@ void setup() {
 
 //////////////////////////// 
 
-  libintdsp_init(&gg);  
+  libintdsp_init(&gg,sin_setup);  
   auto* dac = new_dac(&gg,"dac",&spl_out_a);
   auto* dac2 = new_dac(&gg,"dac2",&spl_out_b);
 
