@@ -81,19 +81,18 @@ int16_t spl_out_a,spl_out_b;
 #define K_F3 18
 #define K_X 19
 
-struct t_io {
-  volatile uint8_t state;
-  volatile uint8_t state_old;
-};
-
 struct HW
 {
+  #define BUTTON(X) (1<<X)
+  uint32_t bstate;
+  uint32_t bstate_old;
+  uint32_t bscan_down;
+  uint32_t bscan_up;
   uint8_t ok;
   int turns;
   int turns_old;
   int turns_state;
   int turns_state_old;
-  volatile t_io io[24];
   const uint8_t seq_row[7] = {14,15,3,4,8};
   uint8_t itr;  
   uint8_t row;
@@ -127,12 +126,25 @@ void kmux_irq(){
 
   else if(kmux.op == 1){
     auto a = GPIOB->regs->IDR;
-    kmux.io[kmux.itr+0].state = (a&(1<<11))>>11;
-    kmux.io[kmux.itr+1].state = (a&(1<<10))>>10;
-    kmux.io[kmux.itr+2].state = (a&(1<<1))>>1;
-    kmux.io[kmux.itr+3].state = (a&(1<<0))>>10;
+    auto s = ((a&(1<<11))>>11) | ((a&(1<<10))>>9) | ((a&(1<<1))<<1) | ((a&(1<<0))<<4);
     gpio_write_bit(kmux.row < 2 ? GPIOA : GPIOB, kmux.seq_row[kmux.row], 0);
     
+    kmux.bstate_old |= ((kmux.bstate&0xf)<<(kmux.itr*4));
+    kmux.bstate |= (s<<(kmux.itr*4));
+
+    kmux.io[kmux.itr+0].state = ((a&(1<<11))>>11) | (kmux.io[kmux.itr+0].state<<1);
+    kmux.io[kmux.itr+1].state = ((a&(1<<10))>>10) | (kmux.io[kmux.itr+1].state<<1);
+    kmux.io[kmux.itr+2].state = ((a&(1<<1))>>1 )  | (kmux.io[kmux.itr+2].state<<1);
+    kmux.io[kmux.itr+3].state = ((a&(1<<0))>>0)  | (kmux.io[kmux.itr+3].state<<1);
+    
+    kmux.io[kmux.itr+0].scan |= 0x1 * (kmux.io[kmux.itr+0].state&0x1) * !((kmux.io[kmux.itr+0].state>>1)&0x1);
+    kmux.io[kmux.itr+0].scan |= 0x2 * !(kmux.io[kmux.itr+0].state&0x1) * ((kmux.io[kmux.itr+0].state>>1)&0x1);
+    kmux.io[kmux.itr+1].scan |= 0x1 * (kmux.io[kmux.itr+1].state&0x1) * !((kmux.io[kmux.itr+1].state>>1)&0x1);
+    kmux.io[kmux.itr+1].scan |= 0x2 * !(kmux.io[kmux.itr+1].state&0x1) * ((kmux.io[kmux.itr+1].state>>1)&0x1);
+    kmux.io[kmux.itr+2].scan |= 0x1 * (kmux.io[kmux.itr+2].state&0x1) * !((kmux.io[kmux.itr+2].state>>1)&0x1);
+    kmux.io[kmux.itr+2].scan |= 0x2 * !(kmux.io[kmux.itr+2].state&0x1) * ((kmux.io[kmux.itr+2].state>>1)&0x1);
+    kmux.io[kmux.itr+3].scan |= 0x1 * (kmux.io[kmux.itr+3].state&0x1) * !((kmux.io[kmux.itr+3].state>>1)&0x1);
+    kmux.io[kmux.itr+3].scan |= 0x2 * !(kmux.io[kmux.itr+3].state&0x1) * ((kmux.io[kmux.itr+3].state>>1)&0x1);
     kmux.itr = (kmux.itr+4)%20;
     kmux.row = (kmux.row+1)%5;
     kmux.op = 2;
@@ -148,37 +160,37 @@ void kmux_irq(){
 
 
   kmux.op = 0;
-  auto a = GPIOB->regs->IDR;
-  kmux.io[20].state = (a&(1<<11))>>11;
-  kmux.io[21].state = (a&(1<<10))>>10;
-  gpio_write_bit(GPIOB, 9, 0);
+  // auto a = GPIOB->regs->IDR;
+  // kmux.io[20].state = (a&(1<<11))>>11;
+  // kmux.io[21].state = (a&(1<<10))>>10;
+  // gpio_write_bit(GPIOB, 9, 0);
 
-  kmux.turns_state = (kmux.io[20].state<<0) | (kmux.io[21].state<<1) | (kmux.io[20].state_old<<2) | (kmux.io[21].state_old<<3);
-  kmux.io[20].state_old = kmux.io[20].state;
-  kmux.io[21].state_old = kmux.io[21].state;
+  // kmux.turns_state = (kmux.io[20].state<<0) | (kmux.io[21].state<<1) | (kmux.io[20].state_old<<2) | (kmux.io[21].state_old<<3);
+  // kmux.io[20].state_old = kmux.io[20].state;
+  // kmux.io[21].state_old = kmux.io[21].state;
 
-  if(kmux.turns_state == 0b0001){
-    if(kmux.turns < 0) kmux.turns = 0;
-    kmux.turns++;
-  }
-  else if(kmux.turns_state == 0b1101){
-    if(kmux.turns > 0) kmux.turns = 0;
-    kmux.turns--;
-  }
-
+  // if(kmux.turns_state == 0b0001){
+  //   if(kmux.turns < 0) kmux.turns = 0;
+  //   kmux.turns++;
+  // }
+  // else if(kmux.turns_state == 0b1101){
+  //   if(kmux.turns > 0) kmux.turns = 0;
+  //   kmux.turns--;
+  // }
 
 }
 
+
 void benchSetup(){
-  gpio_set_mode(GPIOB, 14, GPIO_OUTPUT_PP);
+  //gpio_set_mode(GPIOB, 14, GPIO_OUTPUT_PP);
 }
 
 void benchStart(){
-  GPIOB->regs->BSRR = 1<<14;
+  //GPIOB->regs->BSRR = 1<<14;
 }
 
 void benchEnd(){
-  GPIOB->regs->BSRR = (1<<14)<<16;
+  //GPIOB->regs->BSRR = (1<<14)<<16;
 }
 //TIM4 CH 1 = PB6
 //TIM4 CH 2 = PB7
@@ -257,15 +269,15 @@ void setup() {
   auto os2 = new_osc(&gg,"oscb");
     auto* os1_params = (osc_t*)os1->processor;
     auto* os2_params = (osc_t*)os2->processor;
-    os1_params->acc = 1800;
-    os2_params->acc = 1200;
+    set_osc_freq(os1_params,4400,31250);
+    set_osc_freq(os2_params,3300,31250);
     os1_params->gain = 20;
     os2_params->gain = 20;
     os2_params->table = sawt;
 
   auto* os3 = new_osc(&gg,"oscc");
     auto* os3_params = (osc_t*)os3->processor;
-    os3_params->acc = 750;
+    set_osc_freq(os3_params,550,31250);
     os3_params->gain = 30;
     
   auto* lfo = new_osc(&gg,"lfo");
@@ -275,6 +287,7 @@ void setup() {
     lfo_params->gain = 5;
 
   lpf1 = new_lpf(&gg,"lpf");
+    set_lpf_freq((lpf_t*)(lpf1->processor), 24000, 31250);
     
   adr1 = new_adr(&gg, "adr1");
   set_adr_attack_ms((adr_t*)(adr1->processor), 1000, 31250);
@@ -332,7 +345,7 @@ void setup() {
   dma_enable(DMA1, DMA_CH2);
 
   timer_resume(TIMER1);
-//////////////////////
+// //////////////////////
   
   LOGL("setup complete");
 }
@@ -350,6 +363,15 @@ void loop() {
     Serial.println(kmux.turns);
   }
 
+  if(kmux.io[0].scan&SCAN_BIT_DOWN){
+    kmux.io[0].scan ^= SCAN_BIT_DOWN;
+    set_lpf_freq((lpf_t*)(lpf1->processor), 8000, 31250);
+  } 
+  if(kmux.io[0].scan&SCAN_BIT_UP){
+    kmux.io[0].scan ^= SCAN_BIT_UP;
+    set_lpf_freq((lpf_t*)(lpf1->processor), 24000, 31250);
+  }
+ 
   if(i2s.req){
     benchStart();
     int s = 0;
@@ -360,9 +382,8 @@ void loop() {
     }
     i2s.req = 0;
 
-    ((adr_t*)(adr1->processor))->state = kmux.io[0].state;
-    set_lpf_freq((lpf_t*)(lpf1->processor), kmux.io[1].state ? 8000 : 20000, 31250);
-
+    //((adr_t*)(adr1->processor))->state = kmux.io[0].state&STATE_BIT_CURRENT;
+    
     for(int i=s; i<e; i+=2){
       proc_graph(&gg);
       i2s.buf[i] = spl_out_a;
