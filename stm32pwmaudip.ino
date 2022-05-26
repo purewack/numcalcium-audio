@@ -83,7 +83,9 @@ int16_t spl_out_a,spl_out_b;
 
 struct HW
 {
-  #define BUTTON(X) (1<<X)
+  #define S_BIT(n,b) n |= (1<<(b-1))
+  #define C_BIT(n,b) n &= ~(1<<(b-1))
+  #define BUTTON(b) (1<<(b-1))
   uint32_t bstate;
   uint32_t bstate_old;
   uint32_t bscan_down;
@@ -94,7 +96,6 @@ struct HW
   int turns_state;
   int turns_state_old;
   const uint8_t seq_row[7] = {14,15,3,4,8};
-  uint8_t itr;  
   uint8_t row;
   uint8_t op;
   timer_dev* timer;
@@ -126,26 +127,15 @@ void kmux_irq(){
 
   else if(kmux.op == 1){
     auto a = GPIOB->regs->IDR;
-    auto s = ((a&(1<<11))>>11) | ((a&(1<<10))>>9) | ((a&(1<<1))<<1) | ((a&(1<<0))<<4);
     gpio_write_bit(kmux.row < 2 ? GPIOA : GPIOB, kmux.seq_row[kmux.row], 0);
-    
-    kmux.bstate_old |= ((kmux.bstate&0xf)<<(kmux.itr*4));
-    kmux.bstate |= (s<<(kmux.itr*4));
 
-    kmux.io[kmux.itr+0].state = ((a&(1<<11))>>11) | (kmux.io[kmux.itr+0].state<<1);
-    kmux.io[kmux.itr+1].state = ((a&(1<<10))>>10) | (kmux.io[kmux.itr+1].state<<1);
-    kmux.io[kmux.itr+2].state = ((a&(1<<1))>>1 )  | (kmux.io[kmux.itr+2].state<<1);
-    kmux.io[kmux.itr+3].state = ((a&(1<<0))>>0)  | (kmux.io[kmux.itr+3].state<<1);
+    auto readbyte = ((a&0xc00))>>8) | (a&0x3);
+    kmux.bstate_old = kmux.bstate;
+    kmux.bstate &= ~(0xf<<(kmux.row*4));
+    kmux.bstate |= (readbyte<<(kmux.row*4));
+    kmux.bscan_down |= (kmux.bstate & (~kmux.bstate_old));
+    kmux.bscan_up |= (kmux.bstate_old & (~kmux.bstate));
     
-    kmux.io[kmux.itr+0].scan |= 0x1 * (kmux.io[kmux.itr+0].state&0x1) * !((kmux.io[kmux.itr+0].state>>1)&0x1);
-    kmux.io[kmux.itr+0].scan |= 0x2 * !(kmux.io[kmux.itr+0].state&0x1) * ((kmux.io[kmux.itr+0].state>>1)&0x1);
-    kmux.io[kmux.itr+1].scan |= 0x1 * (kmux.io[kmux.itr+1].state&0x1) * !((kmux.io[kmux.itr+1].state>>1)&0x1);
-    kmux.io[kmux.itr+1].scan |= 0x2 * !(kmux.io[kmux.itr+1].state&0x1) * ((kmux.io[kmux.itr+1].state>>1)&0x1);
-    kmux.io[kmux.itr+2].scan |= 0x1 * (kmux.io[kmux.itr+2].state&0x1) * !((kmux.io[kmux.itr+2].state>>1)&0x1);
-    kmux.io[kmux.itr+2].scan |= 0x2 * !(kmux.io[kmux.itr+2].state&0x1) * ((kmux.io[kmux.itr+2].state>>1)&0x1);
-    kmux.io[kmux.itr+3].scan |= 0x1 * (kmux.io[kmux.itr+3].state&0x1) * !((kmux.io[kmux.itr+3].state>>1)&0x1);
-    kmux.io[kmux.itr+3].scan |= 0x2 * !(kmux.io[kmux.itr+3].state&0x1) * ((kmux.io[kmux.itr+3].state>>1)&0x1);
-    kmux.itr = (kmux.itr+4)%20;
     kmux.row = (kmux.row+1)%5;
     kmux.op = 2;
     return;
@@ -363,12 +353,12 @@ void loop() {
     Serial.println(kmux.turns);
   }
 
-  if(kmux.io[0].scan&SCAN_BIT_DOWN){
-    kmux.io[0].scan ^= SCAN_BIT_DOWN;
+  if(kmux.bscan_down & BUTTON(3)){
+    C_BIT(kmux.bscan_down, BUTTON(3));
     set_lpf_freq((lpf_t*)(lpf1->processor), 8000, 31250);
   } 
-  if(kmux.io[0].scan&SCAN_BIT_UP){
-    kmux.io[0].scan ^= SCAN_BIT_UP;
+  if(kmux.bscan_up & BUTTON(3)){
+    C_BIT(kmux.bscan_up, BUTTON(3));
     set_lpf_freq((lpf_t*)(lpf1->processor), 24000, 31250);
   }
  
