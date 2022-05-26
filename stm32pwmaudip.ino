@@ -129,7 +129,7 @@ void kmux_irq(){
     auto a = GPIOB->regs->IDR;
     gpio_write_bit(kmux.row < 2 ? GPIOA : GPIOB, kmux.seq_row[kmux.row], 0);
 
-    auto readbyte = ((a&0xc00))>>8) | (a&0x3);
+    auto readbyte = ((a&0xc00)>>8) | (a&0x3);
     kmux.bstate_old = kmux.bstate;
     kmux.bstate &= ~(0xf<<(kmux.row*4));
     kmux.bstate |= (readbyte<<(kmux.row*4));
