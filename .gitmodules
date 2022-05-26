@@ -1,3 +1,6 @@
 [submodule "libintdsp"]
 	path = libintdsp
 	url = https://github.com/purewack/libintdsp
+[submodule "numcalcium-base"]
+	path = numcalcium-base
+	url = https://github.com/purewack/numcalcium-base.git
