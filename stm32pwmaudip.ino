@@ -26,7 +26,7 @@ int16_t spl_out_a,spl_out_b;
 
 
 int16_t sin_setup(int16_t p){
-  return int16_t(sin(2.f*3.1415f * float(p)/float(LUT_COUNT)));
+  return int16_t(32766.f * sin(2.f*3.1415f * float(p)/float(LUT_COUNT)));
 }
 
 node_t* adr1;
